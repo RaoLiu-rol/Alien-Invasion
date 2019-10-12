@@ -33,7 +33,7 @@ def check_keyup_events(event, ship):
         ship.moving_down = False
 
 
-def check_events(ai_settings, screen, stats, play_button, ship, aliens, bullets):
+def check_events(ai_settings, screen, stats, scoreboard, play_button, ship, aliens, bullets):
     """响应按键和鼠标事件"""
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -47,26 +47,30 @@ def check_events(ai_settings, screen, stats, play_button, ship, aliens, bullets)
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             mouse_x, mouse_y = pygame.mouse.get_pos()
-            check_play_button(ai_settings, screen, stats, play_button, ship, aliens, bullets, mouse_x, mouse_y)
+            check_play_button(ai_settings, screen, stats, scoreboard, play_button, ship, aliens, bullets, mouse_x, mouse_y)
 
-def check_play_button(ai_settings, screen, stats, play_button, ship, aliens, bullets, mouse_x, mouse_y):
+def check_play_button(ai_settings, screen, stats, scoreboard, play_button, ship, aliens, bullets, mouse_x, mouse_y):
     button_clicked = play_button.rect.collidepoint(mouse_x, mouse_y)
     if button_clicked and not stats.game_active:
-        start_game(ai_settings, screen, stats, play_button, ship, aliens, bullets)
+        start_game(ai_settings, screen, stats, scoreboard, play_button, ship, aliens, bullets)
 
-def start_game(ai_settings, screen, stats, play_button, ship, aliens, bullets):
+def start_game(ai_settings, screen, stats, scoreboard, play_button, ship, aliens, bullets):
         # 隐藏光标
         pygame.mouse.set_visible(False)
         # 点击play按钮重置所有信息
         ai_settings.initialize_dynamic_settings()
         stats.reset_stats()
         stats.game_active = True
+        scoreboard.prep_score()
+        scoreboard.prep_highscore()
+        scoreboard.prep_level()
+        scoreboard.prep_ships()
         aliens.empty()
         bullets.empty()
         creat_fleet(ai_settings, screen, aliens, ship)
         ship.reload_ship()
 
-def update_screen(ai_settings, screen, stats, ship, aliens, bullets, play_button):
+def update_screen(ai_settings, screen, stats, scoreboard, ship, aliens, bullets, play_button):
     """更新屏幕上的图像，并切换到新屏幕"""
     screen.fill(ai_settings.bg_color)
     # 在飞船和外星人后面重绘所有子弹
@@ -74,6 +78,8 @@ def update_screen(ai_settings, screen, stats, ship, aliens, bullets, play_button
         bullet.draw_bullet()
     ship.blitme()
     aliens.draw(screen)
+    # 显示得分
+    scoreboard.show_score()
 
     # 游戏非活动情况下绘制play按钮
     if not stats.game_active:
@@ -90,7 +96,7 @@ def fire_bullet(ai_settings, screen, ship, bullets):
         bullets.add(new_bullet)
 
 
-def update_bullets(ai_settings, screen, ship, aliens, bullets):
+def update_bullets(ai_settings, screen, stats, scoreboard, ship, aliens, bullets):
     # 更新子弹位置
     bullets.update()
 
@@ -99,15 +105,23 @@ def update_bullets(ai_settings, screen, ship, aliens, bullets):
         if bullet.rect.bottom <= 0:
             bullets.remove(bullet)
 
-    check_aliens_reserve(ai_settings, screen, ship, aliens, bullets)
+    check_aliens_reserve(ai_settings, screen, stats, scoreboard, ship, aliens, bullets)
 
-def check_aliens_reserve(ai_settings, screen, ship, aliens, bullets):
+def check_aliens_reserve(ai_settings, screen, stats, scoreboard, ship, aliens, bullets):
     # 碰撞后消除子弹和外星人
     collisions = pygame.sprite.groupcollide(bullets, aliens, True, True)
+    if collisions:
+        for aliens in collisions.values():
+            stats.score += ai_settings.alien_points * len(aliens)
+            scoreboard.prep_score()
+        check_highscore(stats, scoreboard)
     if len(aliens) == 0:
         bullets.empty()
         # 删除现有的子弹并新建一群外星人
         ai_settings.increase_speed()
+        # 提高等级
+        stats.level += 1
+        scoreboard.prep_level()
         creat_fleet(ai_settings, screen, aliens, ship)
 
 
@@ -131,7 +145,7 @@ def create_alien(ai_settings, screen, aliens, alien_number, row_number):
     alien_width = alien.rect.width
     alien_height = alien.rect.height
     alien.x = alien_width + 2 * alien_width * alien_number
-    alien.y = 10 + 2 * alien_height * row_number
+    alien.y = 50 + 2 * alien_height * row_number
     alien.rect.x = alien.x
     alien.rect.y = alien.y
     aliens.add(alien)
@@ -162,12 +176,13 @@ def change_fleet_direction(ai_settings, aliens):
         alien.rect.y += ai_settings.fleet_drop_speed
     ai_settings.fleet_direction *= -1
 
-def ship_hit(ai_settings, stats, screen, ship, aliens, bullets):
+def ship_hit(ai_settings, stats, scoreboard, screen, ship, aliens, bullets):
     """响应飞船被外星人撞到"""
     if stats.ships_left > 0:
         # 剩余飞船数减一
         stats.ships_left -= 1
         # 清空外星人和子弹
+        scoreboard.prep_ships()
         aliens.empty()
         bullets.empty()
 
@@ -181,21 +196,28 @@ def ship_hit(ai_settings, stats, screen, ship, aliens, bullets):
         stats.game_active = False
         pygame.mouse.set_visible(True)
 
-def check_aliens_bottom(ai_settings, stats, screen, ship, aliens, bullets):
+def check_aliens_bottom(ai_settings, stats, scoreboard, screen, ship, aliens, bullets):
     # 检查是否有外星人到了底端
     screen_rect = screen.get_rect()
     for alien in aliens.sprites():
         if alien.rect.y >= screen_rect.bottom:
             # 像飞船被撞一样处理
-            ship_hit(ai_settings, stats, screen, ship, aliens, bullets)
+            ship_hit(ai_settings, stats, scoreboard, screen, ship, aliens, bullets)
 
-def update_aliens(ai_settings, stats, screen, ship, aliens, bullets):
+def update_aliens(ai_settings, stats, scoreboard, screen, ship, aliens, bullets):
     """检查外星人位置是否到屏幕边缘"""
     check_fleet_edges(ai_settings, aliens)
     aliens.update()
 
     # 检查飞船是否与外星人相撞
     if pygame.sprite.spritecollideany(ship, aliens):
-        ship_hit(ai_settings, stats, screen, ship, aliens, bullets)
-    check_aliens_bottom(ai_settings, stats, screen, ship, aliens, bullets)
+        ship_hit(ai_settings, stats, scoreboard, screen, ship, aliens, bullets)
+    check_aliens_bottom(ai_settings, stats, scoreboard, screen, ship, aliens, bullets)
 
+def check_highscore(stats, scoreboard):
+    if stats.score > stats.highscore:
+        stats.highscore = stats.score
+        score_record = stats.highscore
+        scoreboard.prep_highscore()
+        with open('record.txt', 'w') as file_object:
+            file_object.write(str(score_record))

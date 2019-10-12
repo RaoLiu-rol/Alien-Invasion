@@ -24,7 +24,9 @@ class Settings():
         self.fleet_direction = 1
 
         # 确定速度系数
-        self.speed_up_factor = 5
+        self.speed_up_factor = 2
+        # 外星人点数系数
+        self.score_scale = self.speed_up_factor * 1.5
 
         self.initialize_dynamic_settings()
 
@@ -35,8 +37,11 @@ class Settings():
         self.alien_speed_factor = 1
         # fleet_direction为1表示向右移，-1表示向左移
         self.fleet_direction = 1
+        # 计分分值
+        self.alien_points = 50
 
     def increase_speed(self):
         self.ship_speed_factor *= self.speed_up_factor
         self.bullet_speed_factor *= self.speed_up_factor
         self.alien_speed_factor *= self.speed_up_factor
+        self.alien_points = int(self.alien_points * self.score_scale)
